@@ -143,7 +143,6 @@ function HomeScreen({questions,coords,useLocation,onOpen,filter,setFilter,user,s
       {coords?<NearbyMap lat={coords.lat} lng={coords.lng} pins={questions}/>:<div className="mapFallback"><div className="mapGrid"/><div className="youDot"/><button className="locationPill" onClick={useLocation}><MapPin size={15}/> 0.3 miles</button><button className="locationCTA" onClick={useLocation}>Use my location</button></div>}
     </section>
 
-    {!user&&supabaseReady&&<div className="joinCard"><div><b>Join Near By</b><span>Ask, answer and build your reputation.</span></div><LoginButtons/></div>}
 
     <section className="contentSection">
       <div className="sectionTitleRow"><h2>Questions Nearby</h2><button className="searchBtn"><Search size={18}/></button></div>

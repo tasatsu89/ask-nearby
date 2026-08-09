@@ -1,26 +1,9 @@
 {
-  "name": "Ask Nearby",
-  "short_name": "Ask Nearby",
-  "description": "Live answers from people who are actually there.",
+  "name": "Near By",
+  "short_name": "Near By",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f5f6fa",
-  "theme_color": "#6657e8",
-  "icons": [
-    {
-      "src": "/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    },
-    {
-      "src": "/apple-touch-icon.png",
-      "sizes": "180x180",
-      "type": "image/png"
-    }
-  ]
+  "background_color": "#ffffff",
+  "theme_color": "#050505",
+  "icons": []
 }

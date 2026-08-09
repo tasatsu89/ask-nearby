@@ -2,110 +2,229 @@
 
 import dynamic from 'next/dynamic'
 import { useEffect, useMemo, useState } from 'react'
+import { Bell, Camera, Check, ChevronLeft, Clock3, DollarSign, Heart, MapPin, MoreHorizontal, Plus, Search, Settings, ShieldCheck, Star, UserRound, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import LoginButtons from '@/components/LoginButtons'
-import InstallApp from '@/components/InstallApp'
 import type { User } from '@supabase/supabase-js'
 
 const NearbyMap = dynamic(()=>import('@/components/NearbyMap'),{ssr:false})
 
-type Answer={id:string;question_id?:string;user_id?:string|null;body:string;created_at:string}
-type Question={id:string;user_id?:string|null;body:string;place:string|null;lat:number|null;lng:number|null;helpful_count:number;created_at:string;reward_cents?:number;status?:string;answers?:Answer[];distance_meters?:number}
+type Answer={
+  id:string
+  question_id?:string
+  user_id?:string|null
+  body:string
+  created_at:string
+  photo_url?:string|null
+  accepted?:boolean
+  tip_cents?:number
+}
 
-type Tab='home'|'ask'|'profile'
+type Question={
+  id:string
+  user_id?:string|null
+  body:string
+  place:string|null
+  lat:number|null
+  lng:number|null
+  helpful_count:number
+  created_at:string
+  reward_cents?:number
+  status?:string
+  answers?:Answer[]
+  distance_meters?:number
+}
+
+type Tab='home'|'ask'|'notifications'|'profile'
 
 const demo:Question[]=[
- {id:'d1',body:'Does Target have the Nintendo Switch in stock right now?',place:'Target · Alpharetta, GA',lat:34.07,lng:-84.30,helpful_count:14,created_at:new Date().toISOString(),reward_cents:200,status:'open',answers:[{id:'a1',body:'Yes — I’m here now. I can see several in the electronics case.',created_at:new Date().toISOString()}]},
- {id:'d2',body:'Is parking still available near the arena?',place:'Downtown Atlanta',lat:33.75,lng:-84.39,helpful_count:8,created_at:new Date().toISOString(),reward_cents:150,status:'open',answers:[]},
- {id:'d3',body:'How long is the line at this coffee shop?',place:'Avalon',lat:34.07,lng:-84.28,helpful_count:5,created_at:new Date().toISOString(),reward_cents:100,status:'open',answers:[]}
+  {id:'d1',body:'Does Target still have this item?',place:'Target · San Jose, CA',lat:37.3382,lng:-121.8863,helpful_count:14,created_at:new Date(Date.now()-2*60*1000).toISOString(),reward_cents:200,status:'open',answers:[{id:'a1',body:'Yes — they have several in stock right now.',created_at:new Date(Date.now()-60*1000).toISOString(),photo_url:'https://images.unsplash.com/photo-1601524909162-ae8725290836?auto=format&fit=crop&w=900&q=75'}]},
+  {id:'d2',body:'Is this parking lot open right now?',place:'Downtown Atlanta',lat:33.75,lng:-84.39,helpful_count:8,created_at:new Date(Date.now()-5*60*1000).toISOString(),reward_cents:100,status:'open',answers:[]},
+  {id:'d3',body:'Does Costco have cases of bottled water?',place:'Costco · Alpharetta, GA',lat:34.07,lng:-84.28,helpful_count:5,created_at:new Date(Date.now()-10*60*1000).toISOString(),reward_cents:0,status:'open',answers:[]}
 ]
 
+const minutesAgo=(iso:string)=>Math.max(1,Math.round((Date.now()-new Date(iso).getTime())/60000))
+const money=(c=0)=>c>0?`$${(c/100).toFixed(2).replace('.00','')}`:'Free'
+
 export default function Home(){
- const supabase=useMemo(()=>createClient(),[])
- const [user,setUser]=useState<User|null>(null)
- const [questions,setQuestions]=useState<Question[]>(demo)
- const [tab,setTab]=useState<Tab>('home')
- const [body,setBody]=useState('')
- const [place,setPlace]=useState('')
- const [bounty,setBounty]=useState(2)
- const [answerDraft,setAnswerDraft]=useState<Record<string,string>>({})
- const [coords,setCoords]=useState<{lat:number,lng:number}|null>(null)
- const [rating,setRating]=useState(4.9)
- const [tips,setTips]=useState(12.5)
+  const supabase=useMemo(()=>createClient(),[])
+  const [user,setUser]=useState<User|null>(null)
+  const [questions,setQuestions]=useState<Question[]>(demo)
+  const [tab,setTab]=useState<Tab>('home')
+  const [selected,setSelected]=useState<Question|null>(null)
+  const [body,setBody]=useState('')
+  const [place,setPlace]=useState('')
+  const [reward,setReward]=useState(2)
+  const [deadline,setDeadline]=useState(15)
+  const [coords,setCoords]=useState<{lat:number,lng:number}|null>(null)
+  const [answerDraft,setAnswerDraft]=useState<Record<string,string>>({})
+  const [filter,setFilter]=useState<'all'|'paid'|'following'>('all')
 
- async function loadAnswers(ids:string[]){
-   if(!supabase||!ids.length)return {} as Record<string,Answer[]>
-   const {data}=await supabase.from('answers').select('id,question_id,user_id,body,created_at').in('question_id',ids)
-   const grouped:Record<string,Answer[]>={}
-   for(const a of (data||[]) as any[]){grouped[a.question_id]||=[];grouped[a.question_id].push(a)}
-   return grouped
- }
- async function loadQuestions(){
-   if(!supabase)return
-   const {data,error}=await supabase.from('questions').select('*').order('created_at',{ascending:false}).limit(50)
-   if(error||!data)return
-   const grouped=await loadAnswers(data.map((r:any)=>r.id))
-   setQuestions(data.map((r:any)=>({...r,answers:grouped[r.id]||[]})))
- }
- useEffect(()=>{
-   if(!supabase)return
-   supabase.auth.getUser().then(({data})=>setUser(data.user))
-   const {data:sub}=supabase.auth.onAuthStateChange((_e,s)=>setUser(s?.user||null))
-   loadQuestions()
-   return()=>sub.subscription.unsubscribe()
- },[supabase])
+  async function loadAnswers(ids:string[]){
+    if(!supabase||!ids.length)return {} as Record<string,Answer[]>
+    const {data}=await supabase.from('answers').select('id,question_id,user_id,body,created_at,photo_url,accepted,tip_cents').in('question_id',ids)
+    const grouped:Record<string,Answer[]>={}
+    for(const a of (data||[]) as Answer[]){grouped[a.question_id as string]||=[];grouped[a.question_id as string].push(a)}
+    return grouped
+  }
 
- function useLocation(){navigator.geolocation?.getCurrentPosition(p=>setCoords({lat:p.coords.latitude,lng:p.coords.longitude}))}
- const money=(c=0)=>c>0?`$${(c/100).toFixed(2)}`:'Free'
+  async function loadQuestions(){
+    if(!supabase)return
+    const {data,error}=await supabase.from('questions').select('*').order('created_at',{ascending:false}).limit(50)
+    if(error||!data)return
+    const grouped=await loadAnswers(data.map((r:any)=>r.id))
+    setQuestions(data.map((r:any)=>({...r,answers:grouped[r.id]||[]})))
+  }
 
- async function postQuestion(){
-   if(!body.trim())return
-   if(!supabase){setQuestions(q=>[{id:crypto.randomUUID(),body:body.trim(),place:place||'Nearby',lat:coords?.lat||null,lng:coords?.lng||null,helpful_count:0,created_at:new Date().toISOString(),reward_cents:bounty*100,status:'open',answers:[]},...q]);setBody('');setPlace('');setTab('home');return}
-   if(!user)return alert('Please sign in first.')
-   const {error}=await supabase.from('questions').insert({user_id:user.id,body:body.trim(),place:place||null,lat:coords?.lat||null,lng:coords?.lng||null,reward_cents:bounty*100,status:'open'})
-   if(error)return alert(error.message)
-   setBody('');setPlace('');setTab('home');loadQuestions()
- }
- async function postAnswer(qid:string){
-   const txt=(answerDraft[qid]||'').trim();if(!txt)return
-   if(!supabase){setQuestions(q=>q.map(x=>x.id===qid?{...x,answers:[...(x.answers||[]),{id:crypto.randomUUID(),body:txt,created_at:new Date().toISOString()}]}:x));setAnswerDraft(d=>({...d,[qid]:''}));return}
-   if(!user)return alert('Please sign in first.')
-   const {error}=await supabase.from('answers').insert({question_id:qid,user_id:user.id,body:txt})
-   if(error)return alert(error.message)
-   setAnswerDraft(d=>({...d,[qid]:''}));loadQuestions()
- }
- function acceptAnswer(qid:string){setQuestions(q=>q.map(x=>x.id===qid?{...x,status:'resolved'}:x));alert('Answer accepted ✓\nFamily test: bounty is simulated, no real money moved.')}
- function addTip(){setTips(v=>v+1);alert('Demo tip +$1.00 added. No real payment yet.')}
+  useEffect(()=>{
+    if(!supabase)return
+    supabase.auth.getUser().then(({data})=>setUser(data.user))
+    const {data:sub}=supabase.auth.onAuthStateChange((_e,s)=>setUser(s?.user||null))
+    loadQuestions()
+    return()=>sub.subscription.unsubscribe()
+  },[supabase])
 
- return <main className="shell">
-   <header className="top">
-    <div className="brand"><div className="logo">N</div><div><h1>Near By</h1><p>Ask someone who’s actually there.</p></div></div>
-    <div className="topActions"><InstallApp/><button className="pill" onClick={useLocation}>📍 {coords?'Location on':'Use location'}</button></div>
-   </header>
+  function useLocation(){navigator.geolocation?.getCurrentPosition(p=>setCoords({lat:p.coords.latitude,lng:p.coords.longitude}))}
 
-   {!user&&supabase&&<div className="authCard"><div><strong>Join Near By</strong><div className="small">Ask, answer, build reputation.</div></div><LoginButtons/></div>}
+  async function postQuestion(){
+    if(!body.trim())return
+    if(!supabase){
+      setQuestions(q=>[{id:crypto.randomUUID(),body:body.trim(),place:place||'Nearby',lat:coords?.lat||null,lng:coords?.lng||null,helpful_count:0,created_at:new Date().toISOString(),reward_cents:reward*100,status:'open',answers:[]},...q])
+      setBody('');setPlace('');setTab('home');return
+    }
+    if(!user)return alert('Please sign in first.')
+    const {error}=await supabase.from('questions').insert({user_id:user.id,body:body.trim(),place:place||null,lat:coords?.lat||null,lng:coords?.lng||null,reward_cents:reward*100,status:'open'})
+    if(error)return alert(error.message)
+    setBody('');setPlace('');setTab('home');loadQuestions()
+  }
 
-   {tab==='home'&&<>
-    <section className="hero"><span className="eyebrow">REAL-TIME LOCAL ANSWERS</span><h2>Know what’s happening before you get there.</h2><p>Ask nearby people about stock, lines, parking, events and anything happening right now.</p><button className="heroBtn" onClick={()=>setTab('ask')}>＋ Ask a question</button></section>
-    <div className="chips"><span className="chip active">All</span><span className="chip">With bounty</span><span className="chip">Shopping</span><span className="chip">Parking</span><span className="chip">Events</span></div>
-    <div className="content">
-     <section className="panel"><div className="head"><strong>Popular near you</strong><span className="small">Live</span></div><div className="feed">
-      {questions.map(q=><article className="card" key={q.id}>
-       <div className="requestTop"><div><div className="meta">{q.place||'Nearby'} {q.distance_meters!=null&&`· ${(q.distance_meters/1609.344).toFixed(1)} mi`}</div><div className="qtext">{q.body}</div></div><div className="bounty">{money(q.reward_cents)}</div></div>
-       <div className="trust">● Verified location hidden · Fresh answer preferred</div>
-       {(q.answers||[]).map(a=><div className="answer" key={a.id}><div>💬 {a.body}</div>{q.status!=='resolved'&&<div className="answerBtns"><button className="btn accent" onClick={()=>acceptAnswer(q.id)}>✓ Approve answer</button><button className="btn" onClick={addTip}>＋ $1 Tip</button></div>}</div>)}
-       {q.status==='resolved'&&<div className="verified">✓ Answer approved · Rating prompt ready</div>}
-       {q.status!=='resolved'&&<div className="reply"><input className="field" value={answerDraft[q.id]||''} onChange={e=>setAnswerDraft(d=>({...d,[q.id]:e.target.value}))} placeholder="I’m here — here’s what I see…"/><button className="btn accent" onClick={()=>postAnswer(q.id)}>Answer</button></div>}
+  async function postAnswer(qid:string){
+    const txt=(answerDraft[qid]||'').trim();if(!txt)return
+    if(!supabase){
+      setQuestions(q=>q.map(x=>x.id===qid?{...x,answers:[...(x.answers||[]),{id:crypto.randomUUID(),body:txt,created_at:new Date().toISOString()}]}:x))
+      setAnswerDraft(d=>({...d,[qid]:''}));return
+    }
+    if(!user)return alert('Please sign in first.')
+    const {error}=await supabase.from('answers').insert({question_id:qid,user_id:user.id,body:txt})
+    if(error)return alert(error.message)
+    setAnswerDraft(d=>({...d,[qid]:''}));loadQuestions()
+  }
+
+  function approveAnswer(q:Question,a:Answer){
+    alert(`Answer approved ✓\n${money(q.reward_cents)} reward is simulated during family testing.`)
+    setQuestions(list=>list.map(x=>x.id===q.id?{...x,status:'completed',answers:(x.answers||[]).map(y=>y.id===a.id?{...y,accepted:true}:y)}:x))
+    setSelected(s=>s?{...s,status:'completed',answers:(s.answers||[]).map(y=>y.id===a.id?{...y,accepted:true}:y)}:s)
+  }
+
+  const visible=questions.filter(q=>filter==='paid'?(q.reward_cents||0)>0:true)
+
+  return <main className="appShell">
+    {selected ? <DetailScreen q={selected} onBack={()=>setSelected(null)} onApprove={approveAnswer} answerDraft={answerDraft} setAnswerDraft={setAnswerDraft} postAnswer={postAnswer}/> : <>
+      {tab==='home'&&<HomeScreen questions={visible} coords={coords} useLocation={useLocation} onOpen={setSelected} filter={filter} setFilter={setFilter} user={user} supabaseReady={!!supabase}/>} 
+      {tab==='ask'&&<AskScreen body={body} setBody={setBody} place={place} setPlace={setPlace} reward={reward} setReward={setReward} deadline={deadline} setDeadline={setDeadline} postQuestion={postQuestion}/>} 
+      {tab==='notifications'&&<NotificationsScreen/>}
+      {tab==='profile'&&<ProfileScreen user={user} supabaseReady={!!supabase}/>} 
+      <BottomNav tab={tab} setTab={setTab}/>
+    </>}
+  </main>
+}
+
+function Header({user}:{user:User|null}){
+  return <header className="appHeader">
+    <div className="brandWord">Near By</div>
+    <div className="headerActions"><button className="iconBtn" aria-label="Notifications"><Bell size={20}/></button><div className="miniAvatar">{user?.email?.[0]?.toUpperCase()||'Y'}</div></div>
+  </header>
+}
+
+function HomeScreen({questions,coords,useLocation,onOpen,filter,setFilter,user,supabaseReady}:{questions:Question[];coords:{lat:number,lng:number}|null;useLocation:()=>void;onOpen:(q:Question)=>void;filter:'all'|'paid'|'following';setFilter:(v:'all'|'paid'|'following')=>void;user:User|null;supabaseReady:boolean}){
+  return <div className="screen homeScreen">
+    <Header user={user}/>
+    <section className="mapHero">
+      {coords?<NearbyMap lat={coords.lat} lng={coords.lng} pins={questions}/>:<div className="mapFallback"><div className="mapGrid"/><div className="youDot"/><button className="locationPill" onClick={useLocation}><MapPin size={15}/> 0.3 miles</button><button className="locationCTA" onClick={useLocation}>Use my location</button></div>}
+    </section>
+
+    {!user&&supabaseReady&&<div className="joinCard"><div><b>Join Near By</b><span>Ask, answer and build your reputation.</span></div><LoginButtons/></div>}
+
+    <section className="contentSection">
+      <div className="sectionTitleRow"><h2>Questions Nearby</h2><button className="searchBtn"><Search size={18}/></button></div>
+      <div className="segmented">
+        <button className={filter==='all'?'active':''} onClick={()=>setFilter('all')}>All</button>
+        <button className={filter==='paid'?'active':''} onClick={()=>setFilter('paid')}>With reward</button>
+        <button className={filter==='following'?'active':''} onClick={()=>setFilter('following')}>Following</button>
+      </div>
+      <div className="questionList">
+        {questions.map((q,i)=><button className="questionCard" onClick={()=>onOpen(q)} key={q.id}>
+          <div className="cardTop"><div className="personRow"><div className="avatar">{['Y','T','M'][i%3]}</div><div><b>{['Yuki','Taro','Mika'][i%3]}</b><span>{i===0?'0.2 miles':'0.3 miles'} · {minutesAgo(q.created_at)} min ago</span></div></div><span className={(q.reward_cents||0)>0?'rewardTag':'rewardTag freeTag'}>{(q.reward_cents||0)>0?`Reward ${money(q.reward_cents)}`:'No reward'}</span></div>
+          <div className="questionText">{q.body}</div>
+          <div className="placeLine"><MapPin size={14}/>{q.place||'Nearby'}</div>
+          <div className="thumbMock">{i===0?'🎧':i===1?'🅿️':'💧'}</div>
+          <div className="cardFooter"><span>{q.answers?.length||0} answer{(q.answers?.length||0)===1?'':'s'}</span><span><Clock3 size={14}/> {10+i*5} min left</span></div>
+        </button>)}
+      </div>
+    </section>
+  </div>
+}
+
+function AskScreen({body,setBody,place,setPlace,reward,setReward,deadline,setDeadline,postQuestion}:{body:string;setBody:(s:string)=>void;place:string;setPlace:(s:string)=>void;reward:number;setReward:(n:number)=>void;deadline:number;setDeadline:(n:number)=>void;postQuestion:()=>void}){
+  return <div className="screen askScreen">
+    <div className="simpleTop"><h1>Ask a Question</h1></div>
+    <section className="formSection">
+      <label>What do you want to know?</label>
+      <textarea className="bigInput" maxLength={200} value={body} onChange={e=>setBody(e.target.value)} placeholder="Does Target still have this item?"/>
+      <div className="counter">{body.length}/200</div>
+
+      <label>Photo <span>(optional)</span></label>
+      <div className="photoPicker"><div className="photoPreview">🎧<button><X size={13}/></button></div><button className="addPhoto"><Camera size={24}/><span>Add</span></button></div>
+
+      <label>Location</label>
+      <div className="locationField"><div><b>{place||'Choose a place'}</b><span>{place?'Exact user location stays private':'Add a store or venue'}</span></div><button onClick={()=>setPlace(place?'':'Target · 123 Main St, San Jose, CA')}><MapPin size={20}/></button></div>
+
+      <label>Set a reward</label>
+      <p className="helper">Higher rewards can get faster answers.</p>
+      <div className="rewardGrid">{[1,2,3,5].map(v=><button key={v} className={reward===v?'selected':''} onClick={()=>setReward(v)}>${v}</button>)}</div>
+
+      <label>Time limit</label>
+      <select className="selectField" value={deadline} onChange={e=>setDeadline(Number(e.target.value))}><option value={10}>10 minutes</option><option value={15}>15 minutes</option><option value={30}>30 minutes</option><option value={60}>1 hour</option></select>
+
+      <button className="primaryBtn" onClick={postQuestion}>Post Question</button>
+      <div className="paymentNote">Reward: {money(reward*100)} <span>(virtual during family test)</span></div>
+
+      <div className="safetyBox"><h3><ShieldCheck size={19}/> Safety first</h3><ul><li>No requests to track people or vehicles</li><li>No trespassing or dangerous requests</li><li>Precise responder locations stay private</li><li>Report suspicious content anytime</li></ul></div>
+    </section>
+  </div>
+}
+
+function DetailScreen({q,onBack,onApprove,answerDraft,setAnswerDraft,postAnswer}:{q:Question;onBack:()=>void;onApprove:(q:Question,a:Answer)=>void;answerDraft:Record<string,string>;setAnswerDraft:React.Dispatch<React.SetStateAction<Record<string,string>>>;postAnswer:(id:string)=>void}){
+  return <div className="screen detailScreen">
+    <header className="detailTop"><button className="iconBtn" onClick={onBack}><ChevronLeft/></button><h1>Question Details</h1><button className="iconBtn"><MoreHorizontal/></button></header>
+    <div className="timeLeft">8:45 remaining</div>
+    <section className="detailContent">
+      <div className="requesterRow"><div className="avatar large">Y</div><div><b>You</b><span>0.2 miles · 3 min ago</span></div><span className="rewardTag">Reward {money(q.reward_cents)}</span></div>
+      <h2 className="detailQuestion">{q.body}</h2>
+      <div className="productCard"><div className="productPic">🎧</div><div><b>Item to check</b><span>{q.place||'Nearby location'}</span></div></div>
+
+      <h3 className="answerCount">Answers {q.answers?.length||0}</h3>
+      {(q.answers||[]).map((a,i)=><article className="answerCard" key={a.id}>
+        <div className="answerHeader"><div className="personRow"><div className="avatar">{i===0?'H':'J'}</div><div><b>{i===0?'Hana':'Jiro'}</b><span>0.1 miles · {minutesAgo(a.created_at)} min ago</span></div></div><span className="rating"><Star size={15} fill="currentColor"/> {i===0?'4.9':'4.7'}</span></div>
+        {a.photo_url?<img className="answerPhoto" src={a.photo_url} alt="Answer evidence"/>:<div className="answerPhoto placeholder">📷 Photo evidence</div>}
+        <p>{a.body}</p>
+        <div className="answerActions"><button className="secondaryBtn">Reject</button><button className="acceptBtn" onClick={()=>onApprove(q,a)}><Check size={18}/> Accept</button></div>
       </article>)}
-     </div></section>
-     <aside className="sideStack"><section className="panel"><div className="head"><strong>Nearby map</strong><span className="small">Exact user locations hidden</span></div>{coords?<NearbyMap lat={coords.lat} lng={coords.lng} pins={questions}/>:<div className="mapPlaceholder"><div>🗺️</div><strong>See nearby requests</strong><span>Turn on location to see what people need around you.</span><button className="btn accent" onClick={useLocation}>Use my location</button></div>}</section><section className="panel safety"><strong>Safety first</strong><p>No people-tracking, surveillance, trespassing, dangerous or illegal requests. Report suspicious content anytime.</p></section></aside>
-    </div>
-   </>}
 
-   {tab==='ask'&&<section className="panel askPage"><div className="head"><strong>Ask a Question</strong><button className="btn" onClick={()=>setTab('home')}>Close</button></div><label>Your question</label><textarea value={body} onChange={e=>setBody(e.target.value)} placeholder="Does Target have this in stock?"/><label>Where?</label><input className="field" value={place} onChange={e=>setPlace(e.target.value)} placeholder="Target, Alpharetta, GA"/><label>Set a bounty <span className="small">(optional)</span></label><div className="rewardButtons">{[0,1,2,3,5].map(v=><button className={bounty===v?'selected':''} onClick={()=>setBounty(v)} key={v}>{v===0?'Free':`$${v}`}</button>)}</div><div className="safetyCheck">🛡️ No tracking people, private-property surveillance, trespassing, illegal or dangerous tasks.</div><button className="bigPrimary" onClick={postQuestion}>Post Question · {bounty===0?'Free':`$${bounty} virtual`}</button><div className="small center">Family test mode: rewards and tips are simulated.</div></section>}
+      {(!q.answers||q.answers.length===0)&&<div className="emptyAnswers">No answers yet. People nearby can respond here.</div>}
+      <div className="quickAnswer"><input value={answerDraft[q.id]||''} onChange={e=>setAnswerDraft(d=>({...d,[q.id]:e.target.value}))} placeholder="I'm here — here's what I see…"/><button onClick={()=>postAnswer(q.id)}>Answer</button></div>
+    </section>
+  </div>
+}
 
-   {tab==='profile'&&<div className="profileGrid"><section className="panel profileCard"><div className="profileAvatar">Y</div><h2>Your Profile</h2><div className="stars">★★★★★ <b>{rating.toFixed(1)}</b></div><div className="ratingGrid"><div><strong>15</strong><span>Answers</span></div><div><strong>12</strong><span>Approved</span></div><div><strong>${tips.toFixed(2)}</strong><span>Virtual earned</span></div></div></section><section className="panel"><div className="head"><strong>Reputation</strong></div><div className="profileLine"><span>Helper rating</span><b>⭐ 4.9</b></div><div className="profileLine"><span>Requester rating</span><b>⭐ 4.8</b></div><div className="profileLine"><span>Verified answers</span><b>12</b></div><div className="profileLine"><span>Tips earned</span><b>${tips.toFixed(2)}</b></div><button className="bigPrimary" onClick={()=>setRating(5)}>Demo: receive 5★ rating</button></section></div>}
+function NotificationsScreen(){
+  return <div className="screen notificationsScreen"><div className="simpleTop"><h1>Notifications</h1></div><div className="notifTabs"><button className="active">All</button><button>Transactions</button><button>System</button></div><div className="notificationCard"><div className="successIcon"><Check/></div><div><b>Your answer was accepted</b><span>You earned a virtual $2.00 reward.</span><small>2 min ago</small></div></div><div className="notificationCard"><div className="bellIcon"><Bell/></div><div><b>New question nearby</b><span>Someone needs a quick stock check 0.4 miles away.</span><small>6 min ago</small></div></div></div>
+}
 
-   <nav className="bottom"><button className={tab==='home'?'navActive':''} onClick={()=>setTab('home')}>⌂<span>Home</span></button><button className={tab==='ask'?'navActive':''} onClick={()=>setTab('ask')}>＋<span>Ask</span></button><button className={tab==='profile'?'navActive':''} onClick={()=>setTab('profile')}>◉<span>Profile</span></button></nav>
- </main>
+function ProfileScreen({user,supabaseReady}:{user:User|null;supabaseReady:boolean}){
+  return <div className="screen profileScreen"><div className="profileTop"><h1>Profile</h1><Settings size={21}/></div><section className="profileHero"><div className="profileAvatar">{user?.email?.[0]?.toUpperCase()||'Y'}</div><div className="profileName">{user?.email?.split('@')[0]||'You'}</div><div className="handle">@you</div><div className="profileRating"><Star size={18} fill="currentColor"/> 4.8 <span>(23)</span></div><small>Member since 2026</small></section><div className="statsRow"><div><b>12</b><span>Questions</span></div><div><b>15</b><span>Answers</span></div><div><b>14</b><span>Solved</span></div></div><section className="profileSection"><h3>Badges</h3><div className="badges"><div><ShieldCheck/><span>First Answer</span></div><div><Star/><span>Top Answer</span></div><div><Star/><span>Trusted</span></div></div></section><section className="profileSection"><button className="profileLink"><UserRound/> My questions <span>›</span></button><button className="profileLink"><Check/> My answers <span>›</span></button><button className="profileLink"><Heart/> Favorites <span>›</span></button><button className="profileLink"><Settings/> Settings <span>›</span></button></section><section className="earningsCard"><div><span>Total earnings</span><b>$18.00</b><small>Virtual rewards so far</small></div><DollarSign size={30}/></section>{!user&&supabaseReady&&<div className="profileLogin"><LoginButtons/></div>}</div>
+}
+
+function BottomNav({tab,setTab}:{tab:Tab;setTab:(t:Tab)=>void}){
+  return <nav className="bottomNav"><button className={tab==='home'?'active':''} onClick={()=>setTab('home')}><MapPin/><span>Home</span></button><button className={tab==='ask'?'active':''} onClick={()=>setTab('ask')}><Plus/><span>Ask</span></button><button className={tab==='notifications'?'active':''} onClick={()=>setTab('notifications')}><Bell/><span>Alerts</span></button><button className={tab==='profile'?'active':''} onClick={()=>setTab('profile')}><UserRound/><span>Profile</span></button></nav>
 }

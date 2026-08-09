@@ -10,14 +10,14 @@ import type { User } from '@supabase/supabase-js'
 const NearbyMap = dynamic(()=>import('@/components/NearbyMap'),{ssr:false})
 
 type Answer={id:string;question_id?:string;user_id?:string|null;body:string;created_at:string}
-type Question={id:string;user_id?:string|null;body:string;place:string|null;lat:number|null;lng:number|null;helpful_count:number;created_at:string;bounty_cents?:number;status?:string;answers?:Answer[];distance_meters?:number}
+type Question={id:string;user_id?:string|null;body:string;place:string|null;lat:number|null;lng:number|null;helpful_count:number;created_at:string;reward_cents?:number;status?:string;answers?:Answer[];distance_meters?:number}
 
 type Tab='home'|'ask'|'profile'
 
 const demo:Question[]=[
- {id:'d1',body:'Does Target have the Nintendo Switch in stock right now?',place:'Target · Alpharetta, GA',lat:34.07,lng:-84.30,helpful_count:14,created_at:new Date().toISOString(),bounty_cents:200,status:'open',answers:[{id:'a1',body:'Yes — I’m here now. I can see several in the electronics case.',created_at:new Date().toISOString()}]},
- {id:'d2',body:'Is parking still available near the arena?',place:'Downtown Atlanta',lat:33.75,lng:-84.39,helpful_count:8,created_at:new Date().toISOString(),bounty_cents:150,status:'open',answers:[]},
- {id:'d3',body:'How long is the line at this coffee shop?',place:'Avalon',lat:34.07,lng:-84.28,helpful_count:5,created_at:new Date().toISOString(),bounty_cents:100,status:'open',answers:[]}
+ {id:'d1',body:'Does Target have the Nintendo Switch in stock right now?',place:'Target · Alpharetta, GA',lat:34.07,lng:-84.30,helpful_count:14,created_at:new Date().toISOString(),reward_cents:200,status:'open',answers:[{id:'a1',body:'Yes — I’m here now. I can see several in the electronics case.',created_at:new Date().toISOString()}]},
+ {id:'d2',body:'Is parking still available near the arena?',place:'Downtown Atlanta',lat:33.75,lng:-84.39,helpful_count:8,created_at:new Date().toISOString(),reward_cents:150,status:'open',answers:[]},
+ {id:'d3',body:'How long is the line at this coffee shop?',place:'Avalon',lat:34.07,lng:-84.28,helpful_count:5,created_at:new Date().toISOString(),reward_cents:100,status:'open',answers:[]}
 ]
 
 export default function Home(){
@@ -60,9 +60,9 @@ export default function Home(){
 
  async function postQuestion(){
    if(!body.trim())return
-   if(!supabase){setQuestions(q=>[{id:crypto.randomUUID(),body:body.trim(),place:place||'Nearby',lat:coords?.lat||null,lng:coords?.lng||null,helpful_count:0,created_at:new Date().toISOString(),bounty_cents:bounty*100,status:'open',answers:[]},...q]);setBody('');setPlace('');setTab('home');return}
+   if(!supabase){setQuestions(q=>[{id:crypto.randomUUID(),body:body.trim(),place:place||'Nearby',lat:coords?.lat||null,lng:coords?.lng||null,helpful_count:0,created_at:new Date().toISOString(),reward_cents:bounty*100,status:'open',answers:[]},...q]);setBody('');setPlace('');setTab('home');return}
    if(!user)return alert('Please sign in first.')
-   const {error}=await supabase.from('questions').insert({user_id:user.id,body:body.trim(),place:place||null,lat:coords?.lat||null,lng:coords?.lng||null,bounty_cents:bounty*100,status:'open'})
+   const {error}=await supabase.from('questions').insert({user_id:user.id,body:body.trim(),place:place||null,lat:coords?.lat||null,lng:coords?.lng||null,reward_cents:bounty*100,status:'open'})
    if(error)return alert(error.message)
    setBody('');setPlace('');setTab('home');loadQuestions()
  }
@@ -91,7 +91,7 @@ export default function Home(){
     <div className="content">
      <section className="panel"><div className="head"><strong>Popular near you</strong><span className="small">Live</span></div><div className="feed">
       {questions.map(q=><article className="card" key={q.id}>
-       <div className="requestTop"><div><div className="meta">{q.place||'Nearby'} {q.distance_meters!=null&&`· ${(q.distance_meters/1609.344).toFixed(1)} mi`}</div><div className="qtext">{q.body}</div></div><div className="bounty">{money(q.bounty_cents)}</div></div>
+       <div className="requestTop"><div><div className="meta">{q.place||'Nearby'} {q.distance_meters!=null&&`· ${(q.distance_meters/1609.344).toFixed(1)} mi`}</div><div className="qtext">{q.body}</div></div><div className="bounty">{money(q.reward_cents)}</div></div>
        <div className="trust">● Verified location hidden · Fresh answer preferred</div>
        {(q.answers||[]).map(a=><div className="answer" key={a.id}><div>💬 {a.body}</div>{q.status!=='resolved'&&<div className="answerBtns"><button className="btn accent" onClick={()=>acceptAnswer(q.id)}>✓ Approve answer</button><button className="btn" onClick={addTip}>＋ $1 Tip</button></div>}</div>)}
        {q.status==='resolved'&&<div className="verified">✓ Answer approved · Rating prompt ready</div>}

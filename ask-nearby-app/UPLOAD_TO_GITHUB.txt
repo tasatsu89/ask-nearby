@@ -1,0 +1,6 @@
+NEAR BY - PC UPLOAD
+1. Unzip this folder.
+2. On GitHub's upload page, drag ALL files and folders INSIDE ask-nearby-app into the big upload box.
+3. Click Commit changes.
+4. Then import the GitHub repository into Vercel.
+5. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY / publishable key in Vercel Environment Variables.

@@ -1,36 +1,13 @@
 'use client'
-
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet'
-import { useEffect } from 'react'
+import { MapContainer, TileLayer, Circle, CircleMarker, Popup } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 
-type Pin = { id:string; lat:number|null; lng:number|null; body:string; place:string|null }
-
-function Recenter({lat,lng}:{lat:number,lng:number}){
-  const map = useMap()
-  useEffect(()=>{ map.setView([lat,lng],13) },[lat,lng,map])
-  return null
-}
-
-export default function NearbyMap({
-  lat,lng,pins
-}:{lat:number;lng:number;pins:Pin[]}){
-  return (
-    <MapContainer center={[lat,lng]} zoom={13} style={{height:'320px',width:'100%',borderRadius:'18px'}} scrollWheelZoom={false}>
-      <TileLayer
-        attribution='&copy; OpenStreetMap contributors'
-        url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-      />
-      <Recenter lat={lat} lng={lng} />
-      <CircleMarker center={[lat,lng]} radius={9} pathOptions={{color:'#6657e8',fillColor:'#6657e8',fillOpacity:1}}>
-        <Popup>You are here</Popup>
-      </CircleMarker>
-      {pins.filter(p=>p.lat!=null && p.lng!=null).map(p=>(
-        <CircleMarker key={p.id} center={[p.lat as number,p.lng as number]} radius={7}
-          pathOptions={{color:'#19a974',fillColor:'#19a974',fillOpacity:.9}}>
-          <Popup><strong>{p.place || 'Nearby'}</strong><br/>{p.body}</Popup>
-        </CircleMarker>
-      ))}
-    </MapContainer>
-  )
+type Pin={id:string;lat:number|null;lng:number|null;body:string;place:string|null;reward_cents?:number}
+export default function NearbyMap({lat,lng,pins}:{lat:number;lng:number;pins:Pin[]}){
+  return <MapContainer center={[lat,lng]} zoom={13} scrollWheelZoom={false} className="mapCanvas">
+    <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+    <Circle center={[lat,lng]} radius={600} pathOptions={{color:'#1677ff',fillOpacity:.08}} />
+    <CircleMarker center={[lat,lng]} radius={7} pathOptions={{color:'#fff',weight:3,fillColor:'#1677ff',fillOpacity:1}} />
+    {pins.filter(p=>p.lat!=null&&p.lng!=null).map(p=><CircleMarker key={p.id} center={[p.lat!,p.lng!]} radius={11} pathOptions={{color:'#fff',weight:3,fillColor:'#0b57d0',fillOpacity:1}}><Popup><b>{p.place||'Nearby'}</b><br/>{p.body}<br/><b>${((p.reward_cents||0)/100).toFixed(2)} reward</b></Popup></CircleMarker>)}
+  </MapContainer>
 }

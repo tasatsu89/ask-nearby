@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import webpush from 'web-push'
-import { createAdminClient } from '@/lib/supabaseAdmin'
+import { requestUser } from '@/lib/requestUser'
 
 function milesBetween(lat1:number,lng1:number,lat2:number,lng2:number){
   const R=3958.8
@@ -13,17 +13,30 @@ function milesBetween(lat1:number,lng1:number,lat2:number,lng2:number){
 export async function POST(req:NextRequest){
   try{
     const payload = await req.json()
-    const { type, actor_user_id, question_id, question_owner_id, question_body, answer_body, lat, lng, place } = payload || {}
+    const {type,question_id}=payload||{}
+    const {db:supabase,user}=await requestUser(req)
+    if(!user||!supabase)return NextResponse.json({error:'Sign in required'},{status:401})
+    if(!['answer','nearby_question'].includes(type))return NextResponse.json({error:'Invalid event'},{status:400})
+    const {data:q}=await supabase.from('questions').select('*').eq('id',question_id).single()
+    if(!q)return NextResponse.json({error:'Question missing'},{status:404})
+    const {data:a}=await supabase.from('answers').select('*').eq('question_id',q.id).eq('user_id',user.id).order('created_at',{ascending:false}).limit(1).maybeSingle()
+    if((type==='nearby_question'&&q.user_id!==user.id)||(type==='answer'&&!a))return NextResponse.json({error:'Forbidden'},{status:403})
+    if(Date.now()-new Date(type==='answer'?a.created_at:q.created_at).getTime()>5*60*1000)return NextResponse.json({error:'Event too old'},{status:400})
+    const actor_user_id=user.id, question_owner_id=q.user_id,question_body=q.body,answer_body=a?.body,lat=q.lat,lng=q.lng,place=q.place
 
     const subject = process.env.VAPID_SUBJECT
     const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
     const privateKey = process.env.VAPID_PRIVATE_KEY
-    const supabase = createAdminClient()
+
 
     if(!subject || !publicKey || !privateKey || !supabase){
       return NextResponse.json({error:'Push server not configured'},{status:500})
     }
 
+    const event_key=type==='answer'?`answer:${a.id}`:`question:${q.id}`
+    const {error:dedup}=await supabase.from('push_events_family').insert({event_key})
+    if(dedup?.code==='23505')return NextResponse.json({ok:true,duplicate:true})
+    if(dedup)return NextResponse.json({error:'Apply Family Test migration first'},{status:503})
     webpush.setVapidDetails(subject, publicKey, privateKey)
 
     let query = supabase.from('push_subscriptions').select('*')
@@ -34,7 +47,7 @@ export async function POST(req:NextRequest){
     const { data, error } = await query
     if(error) return NextResponse.json({error:error.message},{status:500})
 
-    let subs = data || []
+    let subs = (data || []).filter(s=>{try{const u=new URL(s.endpoint);return u.protocol==='https:'&&!u.port&&!u.username&&!u.password&&['fcm.googleapis.com','updates.push.services.mozilla.com','web.push.apple.com'].includes(u.hostname)}catch{return false}})
 
     if(type === 'nearby_question'){
       subs = subs.filter((s:any)=>{

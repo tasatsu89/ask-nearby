@@ -1,5 +1,6 @@
 'use client'
 
+import { createClient } from '@/lib/supabase'
 import { useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 
@@ -39,9 +40,10 @@ export default function PushNotifications({
         applicationServerKey:urlBase64ToUint8Array(vapid)
       })
 
+      const {data:session}=await createClient()!.auth.getSession()
       const res = await fetch('/api/push/subscribe',{
         method:'POST',
-        headers:{'Content-Type':'application/json'},
+        headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.session?.access_token}`},
         body:JSON.stringify({
           user_id:user.id,
           subscription:subscription.toJSON(),

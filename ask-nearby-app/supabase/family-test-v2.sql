@@ -1,5 +1,12 @@
 -- Additive migration. Review and apply to a preview Supabase project first.
 begin;
+-- Explicit privileges also support projects without automatic Data API grants.
+grant select on public.questions,public.answers to anon,authenticated;
+grant insert on public.questions to authenticated;
+grant select on public.push_subscriptions to authenticated;
+alter table public.profiles enable row level security;
+alter table public.ratings enable row level security;
+alter table public.reports enable row level security;
 alter table public.questions add column if not exists reward_cents integer not null default 0;
 alter table public.questions add column if not exists fee_cents integer not null default 0;
 alter table public.questions add column if not exists expires_at timestamptz;
@@ -12,6 +19,7 @@ alter table public.answers add column if not exists pending_until timestamptz;
 alter table public.answers add column if not exists payout_status text not null default 'pending';
 create table if not exists public.disputes(id uuid primary key default gen_random_uuid(), question_id uuid references public.questions(id), answer_id uuid references public.answers(id), reporter_id uuid references auth.users(id), reason text not null, created_at timestamptz default now());
 alter table public.disputes enable row level security;
+grant select on public.disputes to authenticated;
 drop policy if exists "family disputes own read" on public.disputes;
 create policy "family disputes own read" on public.disputes for select to authenticated using (reporter_id=auth.uid());
 -- Mutations go through atomic RPCs, not arbitrary client updates.

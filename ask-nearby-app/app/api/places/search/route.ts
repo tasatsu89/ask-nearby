@@ -5,6 +5,14 @@ export async function GET(req: NextRequest) {
   const lat = req.nextUrl.searchParams.get('lat')
   const lng = req.nextUrl.searchParams.get('lng')
   if (!q) return NextResponse.json([])
+  const key=process.env.GOOGLE_PLACES_API_KEY
+  if(key){
+    const body:any={textQuery:q,maxResultCount:8}
+    if(lat&&lng&&Number.isFinite(Number(lat))&&Number.isFinite(Number(lng)))body.locationBias={circle:{center:{latitude:Number(lat),longitude:Number(lng)},radius:20000}}
+    const response=await fetch('https://places.googleapis.com/v1/places:searchText',{method:'POST',headers:{'Content-Type':'application/json','X-Goog-Api-Key':key,'X-Goog-FieldMask':'places.id,places.displayName,places.formattedAddress,places.location'},body:JSON.stringify(body),cache:'no-store'})
+    if(!response.ok)return NextResponse.json({error:'Place search unavailable. Check Google Places configuration.'},{status:502})
+    const data=await response.json();return NextResponse.json((data.places||[]).map((p:any)=>({id:p.id,name:p.displayName?.text||p.formattedAddress,address:p.formattedAddress,lat:p.location.latitude,lng:p.location.longitude})))
+  }
   const params = new URLSearchParams({ q, format: 'jsonv2', addressdetails: '1', limit: '8', countrycodes: 'us' })
   if (lat && lng) params.set('viewbox', `${Number(lng)-0.35},${Number(lat)+0.35},${Number(lng)+0.35},${Number(lat)-0.35}`)
   const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {

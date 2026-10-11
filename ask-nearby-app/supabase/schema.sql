@@ -27,6 +27,7 @@ create index if not exists questions_created_at_idx on public.questions(created_
 create or replace function public.set_question_location()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
   if new.lat is not null and new.lng is not null then
@@ -87,7 +88,7 @@ returns table (
 )
 language sql
 stable
-security definer
+security invoker
 set search_path = public
 as $$
   select
@@ -112,6 +113,9 @@ grant execute on function public.nearby_questions(double precision,double precis
 
 do $$
 begin
+  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    create publication supabase_realtime;
+  end if;
   if not exists (
     select 1 from pg_publication_tables
     where pubname = 'supabase_realtime' and schemaname = 'public' and tablename='questions'

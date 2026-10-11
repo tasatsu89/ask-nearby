@@ -13,8 +13,10 @@ drop policy if exists "own push subscriptions" on public.push_subscriptions;
 create policy "own push subscriptions" on public.push_subscriptions for select to authenticated using(user_id=(select auth.uid()));
 -- Explicit privileges also support projects without automatic Data API grants.
 grant select on public.questions,public.answers to anon,authenticated;
+grant select on public.questions,public.answers to service_role;
 grant insert on public.questions to authenticated;
 grant select on public.push_subscriptions to authenticated;
+grant select,insert,update,delete on public.push_subscriptions to service_role;
 alter table if exists public.profiles enable row level security;
 alter table if exists public.ratings enable row level security;
 alter table if exists public.reports enable row level security;
@@ -98,6 +100,7 @@ drop policy if exists "family photo read" on storage.objects;
 create policy "family photo read" on storage.objects for select using(bucket_id='nearby-photos');
 create table if not exists public.push_events_family(event_key text primary key,created_at timestamptz not null default now());
 alter table public.push_events_family enable row level security;
+grant select,insert,update,delete on public.push_events_family to service_role;
 create index if not exists family_answers_question_idx on public.answers(question_id);
 create index if not exists family_answers_pending_idx on public.answers(pending_until,question_id) where payout_status='pending';
 -- Realtime publication is absent on some older installations.

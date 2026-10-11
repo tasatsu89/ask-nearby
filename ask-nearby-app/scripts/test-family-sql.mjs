@@ -9,7 +9,7 @@ const helper = '00000000-0000-4000-8000-000000000002';
 const other = '00000000-0000-4000-8000-000000000003';
 const question = '00000000-0000-4000-8000-000000000004';
 await db.exec(`
- create role anon; create role authenticated; create schema auth; create schema storage;
+ create role anon; create role authenticated; create role service_role; create schema auth; create schema storage;
  create table auth.users(id uuid primary key);
  create function auth.uid() returns uuid language sql stable as
  $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
@@ -34,6 +34,9 @@ const migration = await readFile(new URL('../supabase/family-test-v2.sql', impor
 await db.exec(migration);
 await db.exec(migration); // Repeat rollout must also succeed.
 let checks = 2;
+for (const table of ['questions','answers','push_subscriptions','push_events_family']) {
+ assert.equal((await db.query('select has_table_privilege($1,$2,\'SELECT\') as allowed',['service_role',`public.${table}`])).rows[0].allowed,true); checks++;
+}
 async function asUser(user, sql, params = []) {
  await db.query("select set_config('request.jwt.claim.sub',$1,false)",[user]);
  await db.exec('set role authenticated');
